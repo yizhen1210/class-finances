@@ -1,7 +1,694 @@
 <!DOCTYPE html>
-<html lang="zh-Hant">
-<head><meta charset="utf-8"><title>test</title></head>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>班級收支表</title>
+    <!-- 加入主畫面:名稱與圖示 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#fff8ec">
+    <!-- iOS:主畫面名稱(改這裡就能改 iPhone/iPad 上顯示的名稱) -->
+    <meta name="apple-mobile-web-app-title" content="班級收支表">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="icon-180.png">
+    <link rel="icon" type="image/png" href="icon-192.png">
+    <!-- 芫荽字型(改用 Google Fonts,可用性較高、各裝置一致) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Iansui&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #e8820c;
+            --bg-color: #fff8ec;
+            --dot-color: #f2d093;
+            --card-bg: #ffffff;
+            --border-color: #f0dfc8;
+            --income-color: #27ae60;
+            --expense-color: #c0392b;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Iansui', sans-serif;
+            background-color: var(--bg-color);
+            background-image: radial-gradient(var(--dot-color) 2px, transparent 2px);
+            background-size: 40px 40px;
+            background-position: center top;
+            color: #4a4a4a;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 43px 24px 30px;
+        }
+
+        /* 標題列 */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 3.5px;
+            padding-bottom: 12.5px;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 31.5px;
+        }
+        /* 登入前(未登入):所有裝置標題置中 */
+        html:not(.teacher-mode) .header { justify-content: center; }
+        html:not(.teacher-mode) .header h1 { text-align: center; }
+        /* 桌機/平板登入後:標題+登出整組置中(標題內部間距不動) */
+        @media (min-width: 641px) {
+            .teacher-mode .header { justify-content: center; gap: 40px; }
+        }
+        .header h1 .bag { margin-right: 10px; }
+        .header h1 .num { margin-right: 10px; }
+        /* 芫荽只有單一字重,改用描邊讓標題在各裝置一致地加粗(只套文字,不碰 emoji) */
+        .header h1 .num, .header h1 .title-rest {
+            font-weight: normal;
+            -webkit-text-stroke: 0.6px currentColor;
+        }
+        .header h1 {
+            color: #d05000;
+            font-size: 42px;
+            margin: 0;
+            letter-spacing: 0px;
+        }
+
+        /* 錢袋為隱藏登入觸發點(連擊3下),避免被選取 */
+        .header h1 .bag { user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+
+        /* 卡片 */
+        .card {
+            background: var(--card-bg);
+            padding: 24px 28px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 24px;
+            box-shadow: 0 6px 14px rgba(214, 158, 75, 0.10);
+        }
+
+        /* 結餘卡:縮小上下內距,降低高度 */
+        .summary-card { padding-top: 20px; padding-bottom: 20px; margin-bottom: 10px; }
+
+        /* 總計列 */
+        .summary-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+        }
+        .summary-pill {
+            padding: 8px 22px;
+            border-radius: 50px;
+            border: 1px dashed var(--primary-color);
+            background: #fdf3e0;
+            font-size: 1.1em;
+        }
+        .summary-pill .seg-in { color: var(--income-color); }
+        .summary-pill .seg-ex { color: var(--expense-color); }
+        .summary-pill .sep { color: var(--primary-color); margin: 0 10px; }
+        .balance-wrap { font-size: 1.4em; display: flex; align-items: center; gap: 12px; }
+        #totalBalance {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #d05000;
+            background: #ffe8a8;
+            padding: 4px 20px;
+            border-radius: 12px;
+        }
+
+        /* 明細卡片:白紙 + 真.打洞(JS 依高度精準挖穿,孔距可控、不裁切) */
+        .detail-card {
+            position: relative;
+            background: transparent;
+            padding-left: 66px;
+            padding-right: 20px;
+        }
+        .detail-card > h2,
+        .detail-card > table { position: relative; z-index: 1; }   /* 內容在白紙之上 */
+        .detail-card .paper {              /* 白紙,clip-path 在圓心挖穿 */
+            position: absolute;
+            inset: 0;
+            z-index: 0;
+            background: var(--card-bg);
+            border-radius: 11px;
+        }
+        .detail-card .holes-ring {         /* 洞口極淡陰影,紙張厚度感 */
+            position: absolute;
+            inset: 0;
+            z-index: 2;
+            pointer-events: none;
+            background-repeat: no-repeat;
+        }
+        .detail-card::after {              /* 裝訂直線 */
+            content: '';
+            position: absolute;
+            left: 46px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            z-index: 3;
+            background: #f6dac5;
+        }
+        .detail-card h2 {
+            margin: 4px 0 18px;
+            color: #5a4a35;
+            font-size: 1.6em;
+        }
+
+        /* 表格 */
+        table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        thead tr { background: #fef5e6; }
+        thead th:first-child, tbody td:first-child { width: 156px; }
+        thead th:nth-child(2), tbody td:nth-child(2) { width: 100%; }   /* 項目說明吸收多餘寬度,其餘欄靠右不留空白 */
+        th, td { white-space: nowrap; }                                  /* 各欄不換行(避免類型/金額被擠到換行) */
+        thead th:nth-child(2), tbody td:nth-child(2) { white-space: normal; }  /* 唯項目說明可換行 */
+        th {
+            color: #d05000;
+            padding: 16px 14px;
+            text-align: left;
+            font-size: 1.1em;
+            font-weight: normal;
+            border-bottom: 2px solid #ec9b22;
+        }
+        td {
+            padding: 18px 14px;
+            border-bottom: 1px solid #f1ece2;
+            font-size: 1.08em;
+        }
+        tbody tr:last-child td { border-bottom: none; }
+        td button {
+            background: none;
+            border: 1px solid var(--border-color);
+            color: #b08a55;
+            border-radius: 8px;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        td button:hover { background: #faf2e4; }
+
+        .btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 1em;
+        }
+        .btn:hover { filter: brightness(0.95); }
+
+        .hidden { display: none !important; }
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.25);
+            align-items: center; justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: #fff; padding: 36px 44px;
+            border: 3px solid var(--border-color);
+            border-radius: 20px; text-align: center;
+            box-shadow: 0 20px 55px rgba(0,0,0,0.22);
+            width: min(520px, 90vw);
+        }
+        .modal-title {
+            font-size: 1.4em; color: #3a3a3a; margin: 0 0 22px;
+        }
+        .modal-content input {
+            display: block; width: 100%; box-sizing: border-box; margin: 0 0 24px;
+            padding: 12px 18px; border: 2px solid var(--primary-color);
+            border-radius: 14px; font-family: inherit; font-size: 1.1em; outline: none;
+            text-align: center; background: #fff; color: #3a3a3a;
+            transition: box-shadow .2s;
+        }
+        .modal-content input:focus { border-color: #e8820c; box-shadow: 0 0 12px 3px rgba(232,130,12,0.30); }
+        .modal-content input::placeholder { color: #b3a284; }
+        .modal-actions { display: flex; justify-content: center; gap: 18px; }
+        .modal-actions button {
+            padding: 11px 38px; border-radius: 50px; cursor: pointer;
+            font-family: inherit; font-size: 1.15em; border: 2px solid var(--primary-color);
+            transition: all .2s;
+        }
+        .modal-actions .btn-ok { background: var(--primary-color); color: #fff; }
+        .modal-actions .btn-ok:hover { filter: brightness(0.95); }
+        .modal-actions .btn-cancel { background: #fffaf0; color: var(--primary-color); }
+        .modal-actions .btn-cancel:hover { background: var(--primary-color); color: #fff; }
+
+        /* 登入後:標題鉛筆鈕(更新班級) */
+        .edit-pencil {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 46px; height: 46px; border-radius: 50%;
+            border: 2px solid var(--primary-color); background: #fff;
+            font-size: 24px; line-height: 1; cursor: pointer;
+            vertical-align: middle; padding: 0; margin: 0 3px 0 -7px;
+            transform: translateY(-4px);
+        }
+        .edit-pencil:hover { background: var(--primary-color); }
+        /* 登入後:登出鈕(紅外框) */
+        .logout-btn {
+            background: #fff; color: #c0392b; border: 2px solid #c0392b;
+            padding: 10px 26px; border-radius: 50px; cursor: pointer;
+            font-family: inherit; font-size: 1.05em; white-space: nowrap; transition: all .2s;
+        }
+        .logout-btn:hover { background: #c0392b; color: #fff; }
+
+        /* 新增班費紀錄卡 */
+        .admin-form-title { color: #d05000; font-size: 1.5em; margin: 0 0 18px; }
+        #fundForm { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        #fundForm input, #fundForm select {
+            padding: 14px 18px; border: 1px solid #e2dccf; border-radius: 12px;
+            font-family: inherit; font-size: 1.05em; background: #fff; color: #444;
+            box-sizing: border-box;
+        }
+        #fundForm input:focus, #fundForm select:focus {
+            outline: none;
+            border: 2px solid var(--primary-color);
+            box-shadow: 0 0 0 4px rgba(232,130,12,0.13);
+        }
+        #fundForm #description { flex: 1 1 0; min-width: 0; }
+        #fundForm #amount { flex: 0 0 120px; width: 120px; }
+        #fundForm .btn { padding: 14px 28px; font-size: 1.05em; border-radius: 12px; white-space: nowrap; }
+
+        /* 明細卡垃圾桶(一鍵清空):白底,hover 紅底白圖 */
+        .trash-btn {
+            position: absolute; top: 18px; right: 18px; z-index: 4;
+            width: 44px; height: 44px; border-radius: 50%;
+            border: 2px solid #c0392b; background: #fff; color: #c0392b; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 7px rgba(0,0,0,0.10); transition: all .15s;
+        }
+        .trash-btn:hover { background: #c0392b; color: #fff; }
+        .trash-btn svg { width: 22px; height: 22px; }
+
+        /* 每列還原/刪除鈕:圓形紅外框,hover 紅底白圖 */
+        .row-del {
+            width: 32px; height: 32px; border-radius: 50%;
+            border: 2px solid #c0392b; background: #fff; color: #c0392b;
+            cursor: pointer; padding: 0; transition: all .15s;
+            display: inline-flex; align-items: center; justify-content: center;
+        }
+        .row-del:hover { background: #c0392b; color: #fff; }
+        .row-del svg { width: 15px; height: 15px; }
+
+        /* ===== RWD:手機(≤640px):免左右滑、每筆明細變小卡片 ===== */
+        @media (max-width: 640px) {
+            body { padding-top: 24px; }
+            .header { flex-wrap: wrap; gap: 10px; padding-top: 6px; margin-left: 9px; margin-right: 9px; }
+            .header h1 { font-size: 36px; flex: 1 1 100%; text-align: center; }
+            /* 兩行(登入前後都是):💰508[鉛筆]→第一行、班級款項收入支出表→第二行 */
+            .header h1 .title-rest { display: block; width: 100%; }
+            .header { justify-content: center; }
+            /* 登入後:登出鈕→第三行(置中) */
+            .teacher-mode .header { justify-content: center; }
+            .edit-pencil { width: 33px; height: 33px; font-size: 17px; margin: 0 2px 0 -4px; transform: translateY(-2px); }
+            .logout-btn { padding: 7px 16px; font-size: 0.92em; }
+
+            .card, .summary-card { padding: 16px; }
+            /* 結餘卡、明細卡、新增卡:左右多一些留白並對齊 */
+            .summary-card, .detail-card, #adminArea { margin-left: 9px; margin-right: 9px; }
+            .summary-box { flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+            .balance-wrap { font-size: 1.2em; }
+            .summary-pill { font-size: 1em; padding: 8px 16px; }
+
+            /* 新增表單:直向堆疊、滿寬 */
+            #fundForm { flex-direction: column; align-items: stretch; gap: 10px; }
+            #fundForm input, #fundForm select, #fundForm .btn,
+            #fundForm #description, #fundForm #amount { width: 100%; flex: none; box-sizing: border-box; }
+            #fundForm input[type="date"] { -webkit-appearance: none; appearance: none; min-width: 0; }
+
+            /* 明細卡:手機保留打孔與裝訂線(背景交給 .paper),留出左側打孔欄 */
+            .detail-card { padding-left: 56px; padding-right: 10px; background: var(--bg-color); }
+            .detail-card h2 { font-size: 1.4em; }
+            .trash-btn { top: 14px; right: 14px; width: 40px; height: 40px; }
+
+            /* 表格 → 每筆一張小卡片 */
+            thead { display: none; }
+            table, tbody, tbody tr, tbody td { display: block; width: 100%; }
+            tbody td:first-child { width: auto; }
+            tbody tr {
+                border: 1px solid var(--border-color); border-radius: 12px;
+                background: #fffdf8; padding: 4px 16px; margin-bottom: 14px;
+            }
+            tbody td {
+                border: none; border-bottom: 1px dashed #ead9bd;
+                padding: 12px 0; font-size: 1.05em;
+                display: flex; justify-content: space-between; align-items: center; gap: 12px;
+            }
+            tbody td:last-child { border-bottom: none; }
+            tbody td::before { content: attr(data-label); color: #d05000; font-weight: bold; flex: 0 0 auto; }
+            /* 項目說明:與標籤並列;字數過長才自動往下換行 */
+            tbody td[data-label="項目"] { align-items: flex-start; }
+            tbody td.op-cell { justify-content: flex-end; padding-top: 10px; }
+            tbody td.op-cell::before { content: ""; }
+
+            /* 登入框:手機等比縮放,標題單行不換行、按鈕維持單行橫向(輸入框/按鈕尺寸與桌機相同,直接沿用) */
+            .modal-content { padding: 26px 22px; width: min(420px, 88vw); }
+            .modal-title {
+                font-size: min(20.8px, (88vw - 56px) / 15);
+                margin-bottom: 18px; white-space: nowrap;
+            }
+            .modal-actions button { white-space: nowrap; }
+        }
+        /* 頁尾署名 */
+        .credit {
+            text-align: center;
+            color: #c0a878;
+            font-size: 1.2em;
+            letter-spacing: 0.5px;
+            margin: 24px 0 6px;
+        }
+        #loading {
+            position: fixed; inset: 0; z-index: 2000;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--bg-color);
+            transition: opacity .35s ease;
+        }
+        #loading.hide { opacity: 0; pointer-events: none; }
+        #loading .spinner {
+            width: 46px; height: 46px; border-radius: 50%;
+            border: 4px solid var(--dot-color);
+            border-top-color: var(--primary-color);
+            animation: spin .8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
 <body>
-<h1>test ok</h1>
+    <div id="loading"><div class="spinner"></div></div>
+    <div class="header">
+        <h1><span class="bag">💰</span><span class="num" id="className" style="visibility:hidden">508</span><button id="editClassBtn" class="edit-pencil admin-only hidden" title="更新班級">✏️</button><span class="title-rest">班級款項收入支出表</span></h1>
+        <button id="logoutBtn" class="logout-btn admin-only hidden">登出</button>
+    </div>
+
+    <div id="adminArea" class="card admin-form hidden">
+        <h2 class="admin-form-title">新增班費紀錄</h2>
+        <form id="fundForm">
+            <input type="date" id="date" required>
+            <select id="type"><option value="income">收入</option><option value="expense">支出</option></select>
+            <input type="text" id="description" placeholder="項目說明 (如：影印費、班費收入)" required>
+            <input type="number" id="amount" placeholder="金額 $" required>
+            <button type="submit" class="btn">確認新增</button>
+        </form>
+    </div>
+
+    <div class="card summary-card">
+        <div class="summary-box">
+            <span class="summary-pill"><span class="seg-in">總收入：<span id="totalIncome">0</span></span><span class="sep">|</span><span class="seg-ex">總支出：<span id="totalExpense">0</span></span></span>
+            <span class="balance-wrap">目前結餘：<b id="totalBalance">0</b> 元</span>
+        </div>
+    </div>
+
+    <div class="card detail-card">
+        <div class="paper"></div>
+        <div class="holes-ring"></div>
+        <button id="clearAllBtn" class="trash-btn admin-only hidden" title="清除全部資料"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+        <h2>收支明細</h2>
+        <table>
+            <thead><tr><th>日期</th><th>項目說明</th><th>類型</th><th>金額</th><th class="admin-only hidden">操作</th></tr></thead>
+            <tbody id="recordTableBody"></tbody>
+        </table>
+    </div>
+
+    <footer class="credit">created by 怡臻老師</footer>
+
+    <div id="inputModal" class="modal-overlay">
+        <div class="modal-content">
+            <p class="modal-title">請輸入老師專屬密碼才能編輯：</p>
+            <input type="password" id="passInput" placeholder="密碼" autocomplete="off">
+            <p id="imeHint" style="display:none; margin:-14px 0 18px; font-size:0.9em; color:var(--expense-color);">偵測到中文輸入法,密碼請切換為英數</p>
+            <div class="modal-actions">
+                <button class="btn-ok" onclick="checkPass()">確定</button>
+                <button class="btn-cancel" onclick="closeModal()">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 依明細卡實際高度精準打孔:頭尾留邊較大、中間孔距收緊、永不裁切;獨立於 Firebase
+        window.layoutHoles = function() {
+            const card = document.querySelector('.detail-card');
+            const paper = card && card.querySelector('.paper');
+            const ring = card && card.querySelector('.holes-ring');
+            if(!card || !paper || !ring) return;
+            const W = paper.offsetWidth, H = paper.offsetHeight;
+            if(!H) return;
+            const cx = 24, r = 6, endTop = 62, endBottom = 46, target = 50;  // endTop:第一個洞下移  target:孔距
+            const usable = H - endTop - endBottom;
+            const n = Math.max(2, Math.round(usable / target) + 1);
+            const gap = usable / (n - 1);
+            const ys = [];
+            for(let i = 0; i < n; i++) ys.push(Math.round(endTop + i * gap));
+            // 不再用 clip-path 挖穿(其鋸齒邊緣在高密度螢幕會忽粗忽細)
+            paper.style.clipPath = '';
+            paper.style.webkitClipPath = '';
+            // 在圖層上用漸層直接畫「孔洞=米色圓 + 柔和灰暈」,純漸層渲染各孔/各螢幕一致
+            const cream = getComputedStyle(document.body).getPropertyValue('--bg-color').trim() || '#fff8ec';
+            ring.style.backgroundImage = ys.map(y =>
+                `radial-gradient(circle at ${cx}px ${y}px, ${cream} 0 ${r-0.5}px, rgba(150,128,86,0.34) ${r+0.4}px, rgba(150,128,86,0) ${r+3}px)`
+            ).join(',');
+        };
+        window.addEventListener('resize', window.layoutHoles);
+        window.addEventListener('load', () => requestAnimationFrame(window.layoutHoles));
+        if(document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.layoutHoles());
+
+        // 署名:垂直對齊到「波點列之間的留白」(波點列中心在 20+40k,留白中心在 40 的倍數)
+        window.placeCredit = function() {
+            const c = document.querySelector('.credit');
+            if(!c) return;
+            c.style.transform = 'none';                                   // 先歸零再量
+            const rect = c.getBoundingClientRect();
+            const centerY = rect.top + window.scrollY + rect.height / 2;
+            const target = Math.round(centerY / 40) * 40;                 // 對齊最近的留白中心
+            c.style.transform = `translateY(${target - centerY}px)`;      // 用位移微調,不受邊距合併影響
+        };
+        // 監看明細卡尺寸變化(資料載入、字型載入、縮放等),高度一變就重算孔洞與署名位置
+        if(window.ResizeObserver) {
+            const _dc = document.querySelector('.detail-card');
+            if(_dc) new ResizeObserver(() => { window.layoutHoles(); window.placeCredit(); }).observe(_dc);
+        }
+        window.addEventListener('load', () => requestAnimationFrame(window.placeCredit));
+        window.addEventListener('load', () => setTimeout(window.placeCredit, 250));
+        window.addEventListener('resize', () => requestAnimationFrame(window.placeCredit));
+        if(document.fonts && document.fonts.ready) document.fonts.ready.then(() => window.placeCredit());
+
+        // 左右內距:手機固定小邊距;桌機/平板等比(兩側各約 18.6%,各載具維持相同比例)
+        window.layoutInset = function() {
+            const b = document.body;
+            if(window.innerWidth <= 640) { b.style.paddingLeft = '16px'; b.style.paddingRight = '16px'; return; }
+            const W = b.offsetWidth;
+            const pad = Math.round(W * 0.186);
+            b.style.paddingLeft = pad + 'px';
+            b.style.paddingRight = pad + 'px';
+        };
+        function relayout() { window.layoutInset(); requestAnimationFrame(window.layoutHoles); }
+        window.addEventListener('resize', relayout);
+        window.addEventListener('load', () => requestAnimationFrame(relayout));
+
+        // 登入後:DOM 就緒即顯示老師介面,避免等 Firebase 才出現造成延遲彈出/版面位移
+        if (localStorage.getItem('teacherHint') === '1') {
+            document.addEventListener('DOMContentLoaded', () => {
+                document.documentElement.classList.add('teacher-mode');
+                document.querySelectorAll('.admin-only').forEach(e => e.classList.remove('hidden'));
+                const a = document.getElementById('adminArea'); if (a) a.classList.remove('hidden');
+                requestAnimationFrame(() => window.layoutHoles && window.layoutHoles());
+            });
+        }
+    </script>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, setDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = { apiKey: "AIzaSyAbKy18RLQUybnSVZ0OazwEf5x5Sfgtf8Y", authDomain: "income-114.firebaseapp.com", projectId: "income-114", storageBucket: "income-114.firebasestorage.app", messagingSenderId: "315231640741", appId: "1:315231640741:web:cef9373448f71f9ae9014c", measurementId: "G-G2JGKJRXR8" };
+        const db = getFirestore(initializeApp(firebaseConfig));
+        const auth = getAuth();
+        const TEACHER_EMAIL = "annychen1210@gmail.com";   // 老師帳號 email(email 非機密)
+        let isTeacher = false;
+        const $ = (id) => document.getElementById(id);
+
+        // 登入:只輸入密碼,email 固定;真正驗證由 Firebase 後端處理
+        window.checkPass = async () => {
+            const pw = $('passInput').value;
+            if(!pw) return;
+            try {
+                await signInWithEmailAndPassword(auth, TEACHER_EMAIL, pw);
+                window.closeModal();
+            } catch(err) {
+                alert("密碼錯誤");
+                $('passInput').value = ''; $('passInput').focus();
+            }
+        };
+        window.closeModal = () => { $('inputModal').style.display = 'none'; $('passInput').value = ''; };
+
+        // 隱藏登入:600ms 內連點錢袋 3 下(滑鼠/觸控皆可)→ 未登入開登入框、已登入則登出
+        let bagTaps = 0, bagTimer = null;
+        document.querySelector('.bag').addEventListener('click', () => {
+            bagTaps++;
+            clearTimeout(bagTimer);
+            bagTimer = setTimeout(() => { bagTaps = 0; }, 600);
+            if(bagTaps >= 3) {
+                bagTaps = 0; clearTimeout(bagTimer);
+                if(isTeacher) { signOut(auth); }
+                else { $('inputModal').style.display = 'flex'; const i = $('passInput'); i.value = ''; i.focus(); }
+            }
+        });
+        // Enter 送出
+        $('passInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') window.checkPass(); });
+        // 密碼含非英數(中文/全形/貼上等)即提示切英數
+        const checkIME = () => {
+            $('imeHint').style.display = /[^\x00-\x7F]/.test($('passInput').value) ? 'block' : 'none';
+        };
+        $('passInput').addEventListener('compositionstart', () => { $('imeHint').style.display = 'block'; });
+        $('passInput').addEventListener('input', (e) => { if(!e.isComposing) checkIME(); });
+        $('passInput').addEventListener('compositionend', checkIME);
+
+        // 依登入狀態顯示/隱藏老師介面
+        function applyTeacherUI() {
+            if(isTeacher) {
+                localStorage.setItem('teacherHint', '1');
+                document.documentElement.classList.add('teacher-mode');
+                $('adminArea').classList.remove('hidden');
+                document.querySelectorAll('.admin-only').forEach(e=>e.classList.remove('hidden'));
+            } else {
+                localStorage.removeItem('teacherHint');
+                document.documentElement.classList.remove('teacher-mode');
+                $('adminArea').classList.add('hidden');
+                document.querySelectorAll('.admin-only').forEach(e=>e.classList.add('hidden'));
+            }
+        }
+        // Firebase 會自動記住登入狀態(重新整理仍維持)
+        onAuthStateChanged(auth, (user) => {
+            isTeacher = !!(user && user.email === TEACHER_EMAIL);
+            applyTeacherUI();
+            renderTable();
+        });
+
+        const ROW_DEL_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
+        let latestDocs = [], currentDocIds = [];
+
+        function renderTable() {
+            const tbody = $('recordTableBody'); if(!tbody) return;
+            const frag = document.createDocumentFragment();
+            let income = 0, expense = 0;
+            latestDocs.forEach(({ id, r }) => {
+                if(r.type === 'income') income += r.amount; else expense += r.amount;
+                const c = r.type === 'income' ? '#27ae60' : '#c0392b';
+                const tr = document.createElement('tr');
+
+                const tdDate = document.createElement('td');
+                tdDate.setAttribute('data-label', '日期');
+                tdDate.textContent = r.date;
+
+                const tdDesc = document.createElement('td');
+                tdDesc.setAttribute('data-label', '項目');
+                tdDesc.textContent = r.description;
+
+                const tdType = document.createElement('td');
+                tdType.setAttribute('data-label', '類型');
+                tdType.style.color = c;
+                tdType.textContent = r.type === 'income' ? '收入' : '支出';
+
+                const tdAmt = document.createElement('td');
+                tdAmt.setAttribute('data-label', '金額');
+                tdAmt.style.color = c;
+                tdAmt.textContent = (r.type === 'income' ? '+' : '-') + '$' + r.amount;
+
+                tr.append(tdDate, tdDesc, tdType, tdAmt);
+
+                if(isTeacher) {
+                    const tdOp = document.createElement('td');
+                    tdOp.setAttribute('data-label', '');
+                    tdOp.className = 'op-cell';
+                    const btn = document.createElement('button');
+                    btn.className = 'row-del';
+                    btn.title = '刪除此筆';
+                    btn.innerHTML = ROW_DEL_SVG;   // 靜態圖示,非使用者輸入
+                    btn.addEventListener('click', () => del(id));
+                    tdOp.appendChild(btn);
+                    tr.appendChild(tdOp);
+                }
+                frag.appendChild(tr);
+            });
+            tbody.innerHTML = '';
+            tbody.appendChild(frag);
+            $('totalIncome').innerText = income;
+            $('totalExpense').innerText = expense;
+            $('totalBalance').innerText = income - expense;
+            requestAnimationFrame(() => { window.layoutHoles && window.layoutHoles(); window.placeCredit && window.placeCredit(); });
+        }
+
+        onSnapshot(collection(db, 'classFunds'), (s) => {
+            latestDocs = s.docs.sort((a,b) => b.data().timestamp - a.data().timestamp).map(d => ({ id: d.id, r: d.data() }));
+            currentDocIds = latestDocs.map(x => x.id);
+            renderTable();
+        });
+
+        $('fundForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const amt = parseInt($('amount').value, 10);
+            if(!Number.isFinite(amt) || amt <= 0) {
+                alert('請輸入大於 0 的金額');
+                $('amount').focus();
+                return;
+            }
+            try {
+                await addDoc(collection(db, 'classFunds'), { date: $('date').value, type: $('type').value, description: $('description').value, amount: amt, timestamp: Date.now() });
+                $('description').value = ''; $('amount').value = '';
+            } catch(err) {
+                alert('新增失敗,請檢查網路後再試一次');
+            }
+        };
+        const del = async (id) => {
+            if(confirm('確定刪除這一筆紀錄？')) {
+                try { await deleteDoc(doc(db, 'classFunds', id)); }
+                catch(err) { alert('刪除失敗,請檢查網路後再試一次'); }
+            }
+        };
+        window.del = del;
+        $('date').valueAsDate = new Date();
+
+        // 班級名稱:全體共用,存於 config/class,即時同步。確認資料後移除載入遮罩,標題與內容一起顯示
+        let classNameShown = false;
+        const revealClassName = () => {
+            if(classNameShown) return;
+            classNameShown = true;
+            $('className').style.visibility = 'visible';
+            const ld = $('loading');
+            if(ld) { ld.classList.add('hide'); setTimeout(() => ld.remove(), 400); }
+        };
+        onSnapshot(doc(db, 'config', 'class'), (snap) => {
+            const name = snap.exists() ? snap.data().name : null;
+            if(name) $('className').innerText = name;
+            revealClassName();
+        });
+        // 保險:離線或無回應時 2 秒後仍顯示,避免永久卡在載入
+        setTimeout(revealClassName, 2000);
+        // 鉛筆:更新班級
+        $('editClassBtn').onclick = async () => {
+            const cur = $('className').innerText;
+            const v = prompt('更新班級', cur);
+            if(v && v.trim()) await setDoc(doc(db, 'config', 'class'), { name: v.trim() });
+        };
+        // 登出
+        $('logoutBtn').onclick = () => signOut(auth);
+        // 一鍵清除全部資料
+        $('clearAllBtn').onclick = async () => {
+            if(!currentDocIds.length) { alert('目前沒有資料'); return; }
+            if(!confirm(`確定清除全部 ${currentDocIds.length} 筆資料?此動作無法復原。`)) return;
+            try {
+                const ids = [...currentDocIds];
+                for(let i = 0; i < ids.length; i += 500) {
+                    const batch = writeBatch(db);
+                    ids.slice(i, i + 500).forEach(id => batch.delete(doc(db, 'classFunds', id)));
+                    await batch.commit();
+                }
+            } catch(err) {
+                alert('清除失敗,請檢查網路後再試一次');
+            }
+        };
+    </script>
 </body>
 </html>
