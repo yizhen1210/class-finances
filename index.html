@@ -359,6 +359,17 @@
             letter-spacing: 0.5px;
             margin: 24px 0 6px;
         }
+        .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(58,42,20,.55);z-index:1100;padding:20px;}
+        .modal.show{display:flex;}
+        .modal-box{background:var(--card-bg);color:#3a3a3a;border-radius:16px;padding:22px 22px 16px;max-width:360px;width:100%;box-shadow:0 20px 55px rgba(0,0,0,0.22);border-top:4px solid var(--primary-color);}
+        .modal-msg{margin:0 0 18px;font-size:17px;line-height:1.6;}
+        .modal-act{display:flex;gap:10px;justify-content:flex-end;}
+        .modal-act button{font-family:inherit;cursor:pointer;border-radius:50px;padding:9px 26px;font-size:16px;border:none;}
+        .m-no{background:transparent;border:1px solid var(--border-color);color:#8a7a5c;}
+        .m-ok{background:var(--expense-color);color:#fff;}
+        .m-ok:active,.m-no:active{transform:translateY(1px);}
+        .prompt-input{display:block;width:100%;box-sizing:border-box;margin:0 0 18px;padding:11px 16px;border:2px solid var(--primary-color);border-radius:12px;font-family:inherit;font-size:16px;outline:none;background:#fff;color:#3a3a3a;}
+        .prompt-input:focus{box-shadow:0 0 10px 2px rgba(232,130,12,0.25);}
         #loading {
             position: fixed; inset: 0; z-index: 2000;
             display: flex; align-items: center; justify-content: center;
@@ -423,6 +434,27 @@
                 <button class="btn-cancel" onclick="closeModal()">取消</button>
             </div>
         </div>
+    </div>
+
+    <div class="modal" id="modal">
+      <div class="modal-box">
+        <p class="modal-msg" id="modal-msg"></p>
+        <div class="modal-act">
+          <button class="m-no" id="modal-no">取消</button>
+          <button class="m-ok" id="modal-ok">確定</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal" id="promptModal">
+      <div class="modal-box">
+        <p class="modal-msg" id="prompt-msg"></p>
+        <input type="text" id="prompt-input" class="prompt-input">
+        <div class="modal-act">
+          <button class="m-no" id="prompt-no">取消</button>
+          <button class="m-ok" id="prompt-ok">確定</button>
+        </div>
+      </div>
     </div>
 
     <script>
@@ -509,15 +541,46 @@
         let isTeacher = false;
         const $ = (id) => document.getElementById(id);
 
+        // 自訂對話框(取代原生 confirm/alert)。ask(msg)=雙鈕回傳 true/false;ask(msg,{alert:true})=單鈕提示
+        function ask(msg, opts){
+            const alertOnly = opts && opts.alert;
+            return new Promise(res => {
+                const m = $('modal');
+                $('modal-msg').textContent = msg;
+                const ok = $('modal-ok'), no = $('modal-no');
+                no.style.display = alertOnly ? 'none' : '';
+                m.classList.add('show');
+                const done = v => { m.classList.remove('show'); ok.onclick = null; no.onclick = null; no.style.display = ''; res(v); };
+                ok.onclick = () => done(true);
+                no.onclick = () => done(false);
+            });
+        }
+
+        // 輸入型對話框:回傳輸入字串;取消回傳 null。Enter=確定、Esc=取消
+        function askInput(msg, def){
+            return new Promise(res => {
+                const m = $('promptModal'), inp = $('prompt-input');
+                $('prompt-msg').textContent = msg;
+                inp.value = def || '';
+                const ok = $('prompt-ok'), no = $('prompt-no');
+                m.classList.add('show');
+                setTimeout(() => { inp.focus(); inp.select(); }, 50);
+                const done = v => { m.classList.remove('show'); ok.onclick = null; no.onclick = null; inp.onkeydown = null; res(v); };
+                ok.onclick = () => done(inp.value);
+                no.onclick = () => done(null);
+                inp.onkeydown = e => { if(e.key === 'Enter') done(inp.value); else if(e.key === 'Escape') done(null); };
+            });
+        }
+
         // 登入:只輸入密碼,email 固定;真正驗證由 Firebase 後端處理
         window.checkPass = async () => {
             const pw = $('passInput').value;
-            if(!pw) { alert('請輸入密碼'); $('passInput').focus(); return; }
+            if(!pw) { await ask('請輸入密碼', { alert: true }); $('passInput').focus(); return; }
             try {
                 await signInWithEmailAndPassword(auth, TEACHER_EMAIL, pw);
                 window.closeModal();
             } catch(err) {
-                alert("密碼錯誤");
+                await ask("密碼錯誤", { alert: true });
                 $('passInput').value = ''; $('passInput').focus();
             }
         };
@@ -630,7 +693,7 @@
             e.preventDefault();
             const amt = parseInt($('amount').value, 10);
             if(!Number.isFinite(amt) || amt <= 0) {
-                alert('請輸入大於 0 的金額');
+                await ask('請輸入大於 0 的金額', { alert: true });
                 $('amount').focus();
                 return;
             }
@@ -638,13 +701,13 @@
                 await addDoc(collection(db, 'classFunds'), { date: $('date').value, type: $('type').value, description: $('description').value, amount: amt, timestamp: Date.now() });
                 $('description').value = ''; $('amount').value = '';
             } catch(err) {
-                alert('新增失敗,請檢查網路後再試一次');
+                await ask('新增失敗,請檢查網路後再試一次', { alert: true });
             }
         };
         const del = async (id) => {
-            if(confirm('確定刪除這一筆紀錄？')) {
+            if(await ask('確定刪除這一筆紀錄？')) {
                 try { await deleteDoc(doc(db, 'classFunds', id)); }
-                catch(err) { alert('刪除失敗,請檢查網路後再試一次'); }
+                catch(err) { await ask('刪除失敗,請檢查網路後再試一次', { alert: true }); }
             }
         };
         window.del = del;
@@ -669,15 +732,15 @@
         // 鉛筆:更新班級
         $('editClassBtn').onclick = async () => {
             const cur = $('className').innerText;
-            const v = prompt('更新班級', cur);
+            const v = await askInput('更新班級', cur);
             if(v && v.trim()) await setDoc(doc(db, 'config', 'class'), { name: v.trim() });
         };
         // 登出
         $('logoutBtn').onclick = () => signOut(auth);
         // 一鍵清除全部資料
         $('clearAllBtn').onclick = async () => {
-            if(!currentDocIds.length) { alert('目前沒有資料'); return; }
-            if(!confirm(`確定清除全部 ${currentDocIds.length} 筆資料?此動作無法復原。`)) return;
+            if(!currentDocIds.length) { await ask('目前沒有資料', { alert: true }); return; }
+            if(!await ask(`確定清除全部 ${currentDocIds.length} 筆資料?此動作無法復原。`)) return;
             try {
                 const ids = [...currentDocIds];
                 for(let i = 0; i < ids.length; i += 500) {
@@ -686,7 +749,7 @@
                     await batch.commit();
                 }
             } catch(err) {
-                alert('清除失敗,請檢查網路後再試一次');
+                await ask('清除失敗,請檢查網路後再試一次', { alert: true });
             }
         };
     </script>
