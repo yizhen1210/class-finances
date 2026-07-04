@@ -208,7 +208,7 @@
         }
         .modal-content {
             background: #fff; padding: 36px 44px;
-            border: 3px solid var(--border-color);
+            border: 3px solid var(--primary-color);
             border-radius: 20px; text-align: center;
             box-shadow: 0 20px 55px rgba(0,0,0,0.22);
             width: min(520px, 90vw);
@@ -218,12 +218,12 @@
         }
         .modal-content input {
             display: block; width: 100%; box-sizing: border-box; margin: 0 0 24px;
-            padding: 12px 18px; border: 2px solid var(--primary-color);
+            padding: 12px 18px; border: 2px solid var(--border-color);
             border-radius: 14px; font-family: inherit; font-size: 1.1em; outline: none;
             text-align: center; background: #fff; color: #3a3a3a;
             transition: box-shadow .2s;
         }
-        .modal-content input:focus { border-color: #e8820c; box-shadow: 0 0 12px 3px rgba(232,130,12,0.30); }
+        .modal-content input:focus { border-color: var(--primary-color); box-shadow: 0 0 12px 3px rgba(232,130,12,0.5); }
         .modal-content input::placeholder { color: #d3c6ac; }
         .modal-actions { display: flex; justify-content: center; gap: 18px; }
         .modal-actions button {
@@ -232,8 +232,8 @@
             transition: all .2s;
         }
         .modal-actions .btn-ok { background: var(--primary-color); color: #fff; }
-        .modal-actions .btn-ok:hover { filter: brightness(0.95); }
-        .modal-actions .btn-cancel { background: #fffaf0; color: var(--primary-color); }
+        .modal-actions .btn-ok:hover { background: #c56f08; }
+        .modal-actions .btn-cancel { background: rgba(232,130,12,0.12); color: var(--primary-color); }
         .modal-actions .btn-cancel:hover { background: var(--primary-color); color: #fff; }
 
         /* 登入後:標題鉛筆鈕(更新班級) */
