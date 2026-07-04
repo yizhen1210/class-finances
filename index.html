@@ -512,7 +512,7 @@
         // 登入:只輸入密碼,email 固定;真正驗證由 Firebase 後端處理
         window.checkPass = async () => {
             const pw = $('passInput').value;
-            if(!pw) return;
+            if(!pw) { alert('請輸入密碼'); $('passInput').focus(); return; }
             try {
                 await signInWithEmailAndPassword(auth, TEACHER_EMAIL, pw);
                 window.closeModal();
