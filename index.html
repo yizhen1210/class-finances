@@ -226,6 +226,7 @@
         }
         .modal-content input:focus { border-color: var(--primary-color); box-shadow: 0 0 12px 3px rgba(232,130,12,0.5); }
         .modal-content input::placeholder { color: #f0dfc8; }
+        #imeHint { margin: -14px 0 18px; font-size: 0.9em; color: var(--expense-color); }
         .modal-actions { display: flex; justify-content: center; gap: 18px; }
         .modal-actions button {
             padding: 11px 38px; border-radius: 50px; cursor: pointer;
@@ -430,7 +431,7 @@
         <div class="modal-content">
             <p class="modal-title">請輸入老師專屬密碼才能編輯：</p>
             <input type="password" id="passInput" placeholder="密碼" autocomplete="off">
-            <p id="imeHint" style="display:none; margin:-14px 0 18px; font-size:0.9em; color:var(--expense-color);">偵測到中文輸入法,密碼請切換為英數</p>
+            <p id="imeHint" style="display:none;">偵測到中文輸入法，密碼請切換為英數</p>
             <div class="modal-actions">
                 <button class="btn-ok" onclick="checkPass()">確定</button>
                 <button class="btn-cancel" onclick="closeModal()">取消</button>
@@ -601,7 +602,7 @@
             }
         });
         // Enter 送出
-        $('passInput').addEventListener('keydown', (e) => { if(e.key === 'Enter') window.checkPass(); });
+        $('passInput').addEventListener('keydown', (e) => { if(e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) window.checkPass(); });
         // 密碼含非英數(中文/全形/貼上等)即提示切英數
         const checkIME = () => {
             $('imeHint').style.display = /[^\x00-\x7F]/.test($('passInput').value) ? 'block' : 'none';
