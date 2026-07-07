@@ -211,7 +211,7 @@
             background: #fff; padding: 36px 44px;
             border: 3px solid var(--primary-color);
             border-radius: 20px; text-align: center;
-            box-shadow: 0 20px 55px rgba(0,0,0,0.22);
+            box-shadow: 0 20px 55px rgba(0,0,0,0.22), 0 0 50px 8px rgba(232,130,12,0.13);
             width: min(520px, 90vw);
         }
         .modal-title {
@@ -362,15 +362,16 @@
         }
         .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(58,42,20,.55);z-index:1100;padding:20px;}
         .modal.show{display:flex;}
-        .modal-box{background:var(--card-bg);color:#3a3a3a;border-radius:16px;padding:22px 22px 16px;max-width:360px;width:100%;box-shadow:0 20px 55px rgba(0,0,0,0.22);border-top:4px solid var(--primary-color);}
+        .modal-box{background:var(--card-bg);color:#3a3a3a;border-radius:16px;padding:22px 22px 16px;max-width:360px;width:100%;box-shadow:0 20px 55px rgba(0,0,0,0.4);border-top:4px solid var(--primary-color);}
         .modal-msg{margin:0 0 18px;font-size:17px;line-height:1.6;}
         .modal-act{display:flex;gap:10px;justify-content:flex-end;}
         .modal-act button{font-family:inherit;cursor:pointer;border-radius:50px;padding:9px 26px;font-size:16px;border:none;}
         .m-no{background:transparent;border:1px solid var(--border-color);color:#8a7a5c;}
         .m-ok{background:var(--expense-color);color:#fff;}
         .m-ok:active,.m-no:active{transform:translateY(1px);}
-        .prompt-input{display:block;width:100%;box-sizing:border-box;margin:0 0 18px;padding:11px 16px;border:2px solid var(--primary-color);border-radius:12px;font-family:inherit;font-size:16px;outline:none;background:#fff;color:#3a3a3a;}
-        .prompt-input:focus{box-shadow:0 0 10px 2px rgba(232,130,12,0.25);}
+        .prompt-input{display:block;width:100%;box-sizing:border-box;margin:0 0 24px;padding:12px 18px;border:2px solid var(--border-color);border-radius:14px;font-family:inherit;font-size:1.1em;outline:none;background:#fff;color:#3a3a3a;transition:box-shadow .2s;}
+        .prompt-input:focus{border-color:var(--primary-color);box-shadow:0 0 12px 3px rgba(232,130,12,0.5);}
+        .prompt-input::placeholder{color:#f0dfc8;}
         #loading {
             position: fixed; inset: 0; z-index: 2000;
             display: flex; align-items: center; justify-content: center;
